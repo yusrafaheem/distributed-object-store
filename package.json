@@ -1,0 +1,30 @@
+{
+  "name": "distributed-object-store",
+  "version": "1.0.0",
+  "description": "A distributed, content-addressable object storage system with consistent-hash chunk placement, quorum-based replication, integrity-checked reads with automatic failover, and reference-counted garbage collection — the Dynamo/Haystack/Magic Pocket pattern applied to file storage.",
+  "main": "src/coordinator.js",
+  "type": "commonjs",
+  "scripts": {
+    "start:nodes": "node scripts/startStorageNodes.js",
+    "start:coordinator": "node src/coordinator.js",
+    "start:cluster": "node src/cluster.js",
+    "gc": "node src/gc.js",
+    "test": "node --test test/*.test.js",
+    "benchmark": "node benchmark/load-test.js",
+    "benchmark:resilience": "node benchmark/resilience-test.js",
+    "benchmark:dedup": "node benchmark/dedup-test.js"
+  },
+  "keywords": ["system-design", "distributed-systems", "object-storage", "consistent-hashing", "replication", "node"],
+  "license": "MIT",
+  "dependencies": {
+    "fastify": "^4.28.1",
+    "prom-client": "^15.1.3",
+    "undici": "^6.19.8"
+  },
+  "devDependencies": {
+    "autocannon": "^7.15.0"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
