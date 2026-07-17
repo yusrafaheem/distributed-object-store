@@ -1,0 +1,75 @@
+version: "3.9"
+
+# Brings up the whole cluster: 3 independent storage-node replicas, 2
+# coordinator instances behind nginx, wired together purely through the
+# STORAGE_NODES env var (the same topology mechanism used for local dev
+# without Docker at all — no service-discovery dependency to stand this up).
+services:
+  storage-node-0:
+    build: .
+    command: ["node", "src/storageNode.js"]
+    environment:
+      NODE_ID: node-0
+      PORT: 4100
+      DATA_DIR: /app/data/node-0
+    volumes:
+      - node0-data:/app/data/node-0
+    ports:
+      - "4100:4100"
+
+  storage-node-1:
+    build: .
+    command: ["node", "src/storageNode.js"]
+    environment:
+      NODE_ID: node-1
+      PORT: 4100
+      DATA_DIR: /app/data/node-1
+    volumes:
+      - node1-data:/app/data/node-1
+    ports:
+      - "4101:4100"
+
+  storage-node-2:
+    build: .
+    command: ["node", "src/storageNode.js"]
+    environment:
+      NODE_ID: node-2
+      PORT: 4100
+      DATA_DIR: /app/data/node-2
+    volumes:
+      - node2-data:/app/data/node-2
+    ports:
+      - "4102:4100"
+
+  coordinator:
+    build: .
+    command: ["node", "src/cluster.js"]
+    environment:
+      PORT: 3000
+      DB_PATH: /app/data/metadata.sqlite
+      STORAGE_NODES: "node-0=http://storage-node-0:4100,node-1=http://storage-node-1:4100,node-2=http://storage-node-2:4100"
+      REPLICATION_FACTOR: 3
+      WRITE_QUORUM: 2
+    volumes:
+      - coordinator-data:/app/data
+    depends_on:
+      - storage-node-0
+      - storage-node-1
+      - storage-node-2
+    deploy:
+      replicas: 2
+
+  lb:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - coordinator
+
+volumes:
+  node0-data:
+  node1-data:
+  node2-data:
+  coordinator-data:
