@@ -140,18 +140,23 @@ function buildServer({ dbPath, topology } = {}) {
   // actual bytes. Here "directly" still routes through the coordinator
   // (it's the only thing that knows the ring), but the auth check on the
   // presigned request is just signature+expiry, not a full session lookup.
+  //
+  // The resourcePath signed here MUST match the route that actually checks
+  // the signature (download-presigned below), not the plain /download
+  // route — that route has no auth at all, so a presigned URL pointed at
+  // it would let an expired or tampered signature through unnoticed.
   app.post('/files/:fileId/presign-download', async (req, reply) => {
     const { fileId } = req.params;
     const file = metadataStore.getFile(fileId);
     if (!file) return reply.code(404).send({ error: 'file not found' });
-    const { url, expiresAt } = presign('GET', `/files/${fileId}/download`, { ttlSeconds: 300 });
+    const { url, expiresAt } = presign('GET', `/files/${fileId}/download-presigned`, { ttlSeconds: 300 });
     return reply.send({ url, expiresAt });
   });
 
   app.get('/files/:fileId/download-presigned', async (req, reply) => {
     const { fileId } = req.params;
     try {
-      verifyPresigned('GET', `/files/${fileId}/download`, req.query);
+      verifyPresigned('GET', `/files/${fileId}/download-presigned`, req.query);
     } catch (err) {
       if (err instanceof PresignError) return reply.code(403).send({ error: err.message });
       throw err;
