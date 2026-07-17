@@ -69,8 +69,15 @@ class MetadataStore {
    * version (including chunks reused from the previous version — a chunk
    * that appears in both v1 and v2 of the same file is referenced twice,
    * once per version, until one of those versions is deleted).
+   *
+   * totalSize defaults to 0 rather than being required: callers that only
+   * care about the chunk/refcount bookkeeping (GC tests, dedup tests) have
+   * no reason to compute a byte size just to satisfy this call, and passing
+   * `undefined` through to the SQLite bind previously crashed with "Provided
+   * value cannot be bound to SQLite parameter 3." The real upload path in
+   * server.js always has and passes a real size.
    */
-  commitVersion(fileId, chunkHashes, totalSize) {
+  commitVersion(fileId, chunkHashes, totalSize = 0) {
     const versionId = newId('ver');
     const now = Date.now();
     this.db.prepare('INSERT INTO versions (version_id, file_id, size, created_at) VALUES (?, ?, ?, ?)')
