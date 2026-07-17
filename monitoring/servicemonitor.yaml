@@ -1,0 +1,24 @@
+# Assumes kube-prometheus-stack (the standard Prometheus Operator +
+# Grafana Helm chart) is installed on the cluster -- see monitoring/README.md.
+# This is the idiomatic way to wire a new service into an existing
+# Prometheus/Grafana install: no hand-rolled Prometheus config, just a
+# ServiceMonitor CR the Operator picks up automatically.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: objectstore-coordinator
+  namespace: objectstore
+  labels:
+    # Matches the default ServiceMonitorSelector on a kube-prometheus-stack
+    # Helm install (release name "kube-prometheus-stack").
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: ["objectstore"]
+  selector:
+    matchLabels:
+      app: coordinator
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

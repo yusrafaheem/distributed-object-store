@@ -1,0 +1,101 @@
+# kube-prometheus-stack's Grafana ships with a sidecar that auto-discovers
+# any ConfigMap labeled `grafana_dashboard: "1"` and loads it -- so dropping
+# this in is enough to get the dashboard into Grafana with no manual import
+# step. See monitoring/README.md for the one-time Helm install.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: objectstore-grafana-dashboard
+  namespace: objectstore
+  labels:
+    grafana_dashboard: "1"
+data:
+  objectstore-dashboard.json: |
+    {
+      "title": "Distributed Object Store",
+      "uid": "objectstore-overview",
+      "schemaVersion": 39,
+      "timezone": "browser",
+      "time": { "from": "now-3h", "to": "now" },
+      "refresh": "15s",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Coordinator request rate (req/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            {
+              "expr": "sum(rate(objstore_http_request_duration_seconds_count[5m])) by (route)",
+              "legendFormat": "{{route}}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "p99 request latency by route",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(objstore_http_request_duration_seconds_bucket[5m])) by (le, route))",
+              "legendFormat": "{{route}}"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Quorum write failures (rate)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+          "targets": [
+            { "expr": "rate(objstore_quorum_write_failures_total[5m])", "legendFormat": "write quorum failures/s" }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Quorum read failovers by reason",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+          "targets": [
+            {
+              "expr": "sum(rate(objstore_quorum_read_failovers_total[5m])) by (reason)",
+              "legendFormat": "{{reason}}"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Chunk integrity failures (rate)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+          "targets": [
+            { "expr": "rate(objstore_chunk_integrity_failures_total[5m])", "legendFormat": "SHA-256 mismatches/s" }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Cumulative bytes saved by dedup",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+          "targets": [{ "expr": "objstore_dedup_bytes_saved_total" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" } }
+        },
+        {
+          "id": 7,
+          "title": "GC: chunks reclaimed",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+          "targets": [{ "expr": "objstore_gc_reclaimed_chunks_total" }]
+        },
+        {
+          "id": 8,
+          "title": "Rate limit rejections (rate)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+          "targets": [
+            { "expr": "rate(objstore_rate_limit_rejections_total[5m])", "legendFormat": "429s/s" }
+          ]
+        }
+      ]
+    }
