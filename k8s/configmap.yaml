@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: objectstore-config
+  namespace: objectstore
+data:
+  # Same STORAGE_NODES topology mechanism used for local dev and Docker
+  # Compose (src/topology.js) -- here the values are headless-Service DNS
+  # names instead of localhost ports, but the app code doesn't change at
+  # all. In a real multi-machine deployment this env var would come from
+  # service discovery instead of being hand-listed; that seam is called out
+  # in src/topology.js's own comments.
+  STORAGE_NODES: "storage-node-0=http://storage-node-0.storage-node.objectstore.svc.cluster.local:4100,storage-node-1=http://storage-node-1.storage-node.objectstore.svc.cluster.local:4100,storage-node-2=http://storage-node-2.storage-node.objectstore.svc.cluster.local:4100"
+  REPLICATION_FACTOR: "3"
+  WRITE_QUORUM: "2"

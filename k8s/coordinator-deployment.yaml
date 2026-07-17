@@ -1,0 +1,110 @@
+# Deliberately a single replica, not scaled behind an HPA.
+#
+# src/cluster.js already forks one coordinator worker per CPU core inside
+# THIS pod (see WEB_CONCURRENCY), so a single pod already uses all of the
+# node's cores. Going beyond one *pod* would mean two separate SQLite
+# files on two separate volumes, and src/server.js's own comments call this
+# out directly: the metadata DB is "the seam where a real deployment would
+# swap in a shared metadata service (Postgres, DynamoDB, etc.)". Running
+# two coordinator pods today, behind a Service that round-robins between
+# them, would silently split file visibility between replicas -- a
+# correctness bug, not a scaling win. Horizontal coordinator scaling is
+# real future work, gated on that swap, not something to paper over with
+# an HPA here.
+#
+# The GC sweep runs as a second container in the SAME pod (not a separate
+# CronJob) specifically so it can share this pod's volume directly --
+# avoiding any cross-node / concurrent-mount questions around the
+# ReadWriteOnce PVC that a separate CronJob pod would raise.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coordinator
+  namespace: objectstore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coordinator
+  template:
+    metadata:
+      labels:
+        app: coordinator
+    spec:
+      containers:
+        - name: coordinator
+          image: ghcr.io/yusrafaheem/distributed-object-store:latest
+          command: ["node", "src/cluster.js"]
+          envFrom:
+            - configMapRef:
+                name: objectstore-config
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DB_PATH
+              value: "/data/metadata.sqlite"
+          ports:
+            - containerPort: 3000
+              name: http
+          volumeMounts:
+            - name: metadata
+              mountPath: /data
+          readinessProbe:
+            httpGet: { path: /health, port: 3000 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 3000 }
+            initialDelaySeconds: 10
+          resources:
+            requests: { cpu: "200m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "512Mi" }
+        - name: gc-sweeper
+          image: ghcr.io/yusrafaheem/distributed-object-store:latest
+          # Same periodic-sweep cadence as running `npm run gc` on a cron;
+          # packaged as a sidecar instead of a separate CronJob so it can
+          # mount the same local volume as the coordinator without any
+          # ReadWriteMany/concurrent-mount concerns.
+          command:
+            - sh
+            - -c
+            - "while true; do sleep 900; node src/gc.js || true; done"
+          envFrom:
+            - configMapRef:
+                name: objectstore-config
+          env:
+            - name: DB_PATH
+              value: "/data/metadata.sqlite"
+          volumeMounts:
+            - name: metadata
+              mountPath: /data
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits: { cpu: "250m", memory: "256Mi" }
+      volumes:
+        - name: metadata
+          persistentVolumeClaim:
+            claimName: coordinator-metadata
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coordinator-metadata
+  namespace: objectstore
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coordinator
+  namespace: objectstore
+spec:
+  selector:
+    app: coordinator
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
