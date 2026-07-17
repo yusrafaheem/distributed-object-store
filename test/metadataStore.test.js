@@ -19,8 +19,8 @@ test('commitVersion increments refcount once per chunk reference, including dupl
     // hash-a appears twice in the same manifest (e.g. a repeated block).
     store.commitVersion(fileId, ['hash-a', 'hash-b', 'hash-a']);
 
-    assert.equal(store.getChunkRefcount('hash-a'), 2);
-    assert.equal(store.getChunkRefcount('hash-b'), 1);
+    assert.equal(store.getRefcount('hash-a'), 2);
+    assert.equal(store.getRefcount('hash-b'), 1);
   } finally {
     store.close();
     fs.rmSync(dbPath, { force: true });
@@ -37,13 +37,13 @@ test('a chunk shared across two files keeps a positive refcount after one file v
     const versionA = store.commitVersion(fileA, ['shared-hash', 'a-only-hash']);
     store.commitVersion(fileB, ['shared-hash']);
 
-    assert.equal(store.getChunkRefcount('shared-hash'), 2);
+    assert.equal(store.getRefcount('shared-hash'), 2);
 
     store.deleteVersion(versionA);
 
     // File B still references shared-hash, so it must not be orphaned.
-    assert.equal(store.getChunkRefcount('shared-hash'), 1);
-    assert.equal(store.getChunkRefcount('a-only-hash'), 0);
+    assert.equal(store.getRefcount('shared-hash'), 1);
+    assert.equal(store.getRefcount('a-only-hash'), 0);
   } finally {
     store.close();
     fs.rmSync(dbPath, { force: true });
@@ -93,7 +93,7 @@ test('committing a new version updates the file current_version_id', () => {
     const v2 = store.commitVersion(fileId, ['v2-hash']);
 
     const file = store.getFile(fileId);
-    assert.equal(file.currentVersionId, v2);
+    assert.equal(file.current_version_id, v2);
     assert.notEqual(v1, v2);
   } finally {
     store.close();
