@@ -2,107 +2,53 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { generatePresignedUrl, verifyPresignedSignature } = require('../src/presign');
+const { presign, verifyPresigned, PresignError } = require('../src/presign');
 
-const SECRET = 'test-secret-key-do-not-use-in-prod';
+const METHOD = 'GET';
+const RESOURCE_PATH = '/files/abc123/download-presigned';
 
 test('a freshly presigned URL verifies successfully', () => {
-  const { signature, expiresAt } = generatePresignedUrl({
-    secret: SECRET,
-    method: 'GET',
-    resourcePath: '/files/abc123/download-presigned',
-    ttlSeconds: 60,
-  });
+  const { expiresAt, signature } = presign(METHOD, RESOURCE_PATH, { ttlSeconds: 60 });
 
-  const result = verifyPresignedSignature({
-    secret: SECRET,
-    method: 'GET',
-    resourcePath: '/files/abc123/download-presigned',
-    signature,
-    expiresAt,
-  });
-
-  assert.equal(result.valid, true);
+  assert.doesNotThrow(() =>
+    verifyPresigned(METHOD, RESOURCE_PATH, { expires: expiresAt, sig: signature })
+  );
 });
 
 test('an expired URL is rejected', () => {
-  const { signature } = generatePresignedUrl({
-    secret: SECRET,
-    method: 'GET',
-    resourcePath: '/files/abc123/download-presigned',
-    ttlSeconds: 60,
-  });
-
+  const { signature } = presign(METHOD, RESOURCE_PATH, { ttlSeconds: 60 });
   const alreadyExpired = Date.now() - 1000;
-  const result = verifyPresignedSignature({
-    secret: SECRET,
-    method: 'GET',
-    resourcePath: '/files/abc123/download-presigned',
-    signature,
-    expiresAt: alreadyExpired,
-  });
 
-  assert.equal(result.valid, false);
-  assert.equal(result.reason, 'expired');
+  assert.throws(
+    () => verifyPresigned(METHOD, RESOURCE_PATH, { expires: alreadyExpired, sig: signature }),
+    (err) => err instanceof PresignError && /expired/.test(err.message)
+  );
 });
 
 test('a tampered signature is rejected', () => {
-  const { signature, expiresAt } = generatePresignedUrl({
-    secret: SECRET,
-    method: 'GET',
-    resourcePath: '/files/abc123/download-presigned',
-    ttlSeconds: 60,
-  });
+  const { expiresAt, signature } = presign(METHOD, RESOURCE_PATH, { ttlSeconds: 60 });
+  const tampered = signature.slice(0, -4) + 'aaaa';
 
-  const tampered = signature.slice(0, -4) + 'AAAA';
-  const result = verifyPresignedSignature({
-    secret: SECRET,
-    method: 'GET',
-    resourcePath: '/files/abc123/download-presigned',
-    signature: tampered,
-    expiresAt,
-  });
-
-  assert.equal(result.valid, false);
-  assert.equal(result.reason, 'bad_signature');
+  assert.throws(
+    () => verifyPresigned(METHOD, RESOURCE_PATH, { expires: expiresAt, sig: tampered }),
+    (err) => err instanceof PresignError && /tampered/.test(err.message)
+  );
 });
 
 test('a signature cannot be reused for a different HTTP method', () => {
-  const { signature, expiresAt } = generatePresignedUrl({
-    secret: SECRET,
-    method: 'GET',
-    resourcePath: '/files/abc123/download-presigned',
-    ttlSeconds: 60,
-  });
+  const { expiresAt, signature } = presign(METHOD, RESOURCE_PATH, { ttlSeconds: 60 });
 
-  const result = verifyPresignedSignature({
-    secret: SECRET,
-    method: 'DELETE',
-    resourcePath: '/files/abc123/download-presigned',
-    signature,
-    expiresAt,
-  });
-
-  assert.equal(result.valid, false);
-  assert.equal(result.reason, 'bad_signature');
+  assert.throws(
+    () => verifyPresigned('DELETE', RESOURCE_PATH, { expires: expiresAt, sig: signature }),
+    (err) => err instanceof PresignError && /tampered/.test(err.message)
+  );
 });
 
 test('a signature cannot be reused for a different resource path', () => {
-  const { signature, expiresAt } = generatePresignedUrl({
-    secret: SECRET,
-    method: 'GET',
-    resourcePath: '/files/abc123/download-presigned',
-    ttlSeconds: 60,
-  });
+  const { expiresAt, signature } = presign(METHOD, RESOURCE_PATH, { ttlSeconds: 60 });
 
-  const result = verifyPresignedSignature({
-    secret: SECRET,
-    method: 'GET',
-    resourcePath: '/files/some-other-file/download-presigned',
-    signature,
-    expiresAt,
-  });
-
-  assert.equal(result.valid, false);
-  assert.equal(result.reason, 'bad_signature');
+  assert.throws(
+    () => verifyPresigned(METHOD, '/files/some-other-file/download-presigned', { expires: expiresAt, sig: signature }),
+    (err) => err instanceof PresignError && /tampered/.test(err.message)
+  );
 });
