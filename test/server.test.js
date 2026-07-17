@@ -75,7 +75,10 @@ test('upload then download returns byte-identical content across multiple chunks
     writeQuorum: 2,
   });
 
-  const server = buildServer({ coordinator, metadataStore });
+  // buildServer() returns { app, coordinator, metadataStore, ring } -- the
+  // Fastify instance lives at .app, so it's what .inject()/.close() need to
+  // be called on.
+  const { app: server } = buildServer({ coordinator, metadataStore });
   t.after(async () => {
     await server.close();
     metadataStore.close();
@@ -116,7 +119,7 @@ test('uploading the same file twice deduplicates every chunk', async (t) => {
     writeQuorum: 2,
   });
 
-  const server = buildServer({ coordinator, metadataStore });
+  const { app: server } = buildServer({ coordinator, metadataStore });
   t.after(async () => {
     await server.close();
     metadataStore.close();
@@ -165,7 +168,7 @@ test('presigned download URL works and an expired one is rejected with 403', asy
     writeQuorum: 2,
   });
 
-  const server = buildServer({
+  const { app: server } = buildServer({
     coordinator,
     metadataStore,
     presignSecret: 'integration-test-secret',
