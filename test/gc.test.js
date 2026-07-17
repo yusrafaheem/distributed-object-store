@@ -65,7 +65,7 @@ test('GC reclaims a truly orphaned chunk but leaves one still referenced by anot
   const { HashRing } = require('../src/hashRing');
   const { Coordinator } = require('../src/coordinator');
   const { MetadataStore } = require('../src/metadataStore');
-  const { chunkBuffer, hashOf } = require('../src/chunker');
+  const { hashChunk } = require('../src/chunker');
   const { runGarbageCollection } = require('../src/gc');
 
   const ring = new HashRing();
@@ -89,8 +89,8 @@ test('GC reclaims a truly orphaned chunk but leaves one still referenced by anot
   // only by file A.
   const sharedBytes = Buffer.alloc(256 * 1024, 1);
   const onlyABytes = Buffer.alloc(256 * 1024, 2);
-  const sharedHash = hashOf(sharedBytes);
-  const onlyAHash = hashOf(onlyABytes);
+  const sharedHash = hashChunk(sharedBytes);
+  const onlyAHash = hashChunk(onlyABytes);
 
   await coordinator.putChunk(sharedHash, sharedBytes);
   await coordinator.putChunk(onlyAHash, onlyABytes);
