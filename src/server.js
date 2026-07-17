@@ -87,21 +87,22 @@ function buildServer({ dbPath, topology } = {}) {
     if (!Buffer.isBuffer(buf)) return reply.code(400).send({ error: 'expected application/octet-stream body' });
 
     const previousVersionId = file.current_version_id;
-    const previousVersion = previousVersionId ? metadataStore.getVersion(previousVersionId) : null;
     const { chunkHashes, totalSize } = await uploadChunks(buf);
     const versionId = metadataStore.commitVersion(fileId, chunkHashes, totalSize);
 
-    if (previousVersion) {
-      // Reclaim space from the old version immediately rather than waiting
-      // for the next GC sweep: any chunk that isn't part of the new
-      // manifest is no longer needed by *this* file, so delete it from the
-      // replicas right away instead of leaving it to the periodic sweep.
-      const newSet = new Set(chunkHashes);
-      const droppedChunks = previousVersion.chunkHashes.filter((h) => !newSet.has(h));
-      for (const hash of droppedChunks) {
-        // eslint-disable-next-line no-await-in-loop
-        await coordinator.deleteChunk(hash);
-      }
+    if (previousVersionId) {
+      // Deleting the previous version only decrements the GLOBAL refcount
+      // for the chunks it referenced (see metadataStore.deleteVersion). We
+      // deliberately do NOT delete any chunk bytes from the replicas here,
+      // even ones that look "dropped" from this file's new manifest — a
+      // chunk hash can be shared by other files/versions via dedup, and the
+      // per-file diff has no way to know that. Physical deletion is handled
+      // exclusively by the background GC sweep (src/gc.js), which only ever
+      // acts on chunks whose global refcount has actually reached zero.
+      // See test/dedupCorruption.test.js for the regression this guards
+      // against: an earlier version of this handler deleted "dropped"
+      // chunks immediately and silently corrupted any other file that
+      // still pointed at the same chunk hash.
       metadataStore.deleteVersion(previousVersionId);
     }
 
