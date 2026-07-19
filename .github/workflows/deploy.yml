@@ -1,0 +1,53 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm test
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    # Only does anything once KUBE_CONFIG is set as a repo secret (Settings
+    # > Secrets and variables > Actions) -- see DEPLOYMENT.md for how to
+    # generate it from the Terraform-provisioned k3s host. Until then this
+    # job fails fast on a missing kubeconfig rather than doing anything.
+    steps:
+      - uses: azure/setup-kubectl@v4
+      - name: Write kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+      - name: Roll out new image
+        run: |
+          kubectl -n objectstore set image deployment/coordinator \
+            coordinator=ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            gc-sweeper=ghcr.io/${{ github.repository }}:${{ github.sha }}
+          kubectl -n objectstore rollout restart statefulset/storage-node
+          kubectl -n objectstore rollout status deployment/coordinator --timeout=120s
