@@ -55,6 +55,8 @@ async function spawnCluster() {
   };
 }
 
+const OCTET_STREAM = { 'content-type': 'application/octet-stream' };
+
 test('upload then download returns byte-identical content across multiple chunks', async (t) => {
   const cluster = await spawnCluster();
   t.after(() => cluster.cleanup());
@@ -70,7 +72,7 @@ test('upload then download returns byte-identical content across multiple chunks
   const body = Buffer.alloc(700 * 1024);
   for (let i = 0; i < body.length; i++) body[i] = i % 256;
 
-  const uploadRes = await app.inject({ method: 'POST', url: '/files', payload: body });
+  const uploadRes = await app.inject({ method: 'POST', url: '/files', payload: body, headers: OCTET_STREAM });
   assert.equal(uploadRes.statusCode, 201);
   const { fileId } = uploadRes.json();
 
@@ -102,10 +104,12 @@ test('uploading the same file twice deduplicates every chunk', async (t) => {
     return total;
   }
 
-  await app.inject({ method: 'POST', url: '/files', payload: body });
+  const firstUpload = await app.inject({ method: 'POST', url: '/files', payload: body, headers: OCTET_STREAM });
+  assert.equal(firstUpload.statusCode, 201);
   const afterFirst = await totalChunkCount();
 
-  await app.inject({ method: 'POST', url: '/files', payload: body });
+  const secondUpload = await app.inject({ method: 'POST', url: '/files', payload: body, headers: OCTET_STREAM });
+  assert.equal(secondUpload.statusCode, 201);
   const afterSecond = await totalChunkCount();
 
   assert.equal(afterSecond, afterFirst, 'uploading identical content again must not add new chunks');
@@ -123,7 +127,8 @@ test('presigned download URL works and an expired one is rejected with 403', asy
   });
 
   const body = Buffer.from('presigned download integration test payload');
-  const uploadRes = await app.inject({ method: 'POST', url: '/files', payload: body });
+  const uploadRes = await app.inject({ method: 'POST', url: '/files', payload: body, headers: OCTET_STREAM });
+  assert.equal(uploadRes.statusCode, 201);
   const { fileId } = uploadRes.json();
 
   const presignRes = await app.inject({
