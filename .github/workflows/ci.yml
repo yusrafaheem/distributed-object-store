@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
 
+  # Trigger a fresh synchronize so this PR's checks re-run against the latest main.
+
 jobs:
   test:
     runs-on: ubuntu-latest
